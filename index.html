@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="pt-br" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: { colors: { darkBg: '#0f172a', darkCard: '#1e293b' } } }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+    body { font-family: 'Inter', sans-serif; transition: background-color 0.3s ease; }
+    .table-sort-icon { font-size: 0.7rem; margin-left: 4px; }
+  </style>
+</head>
+<body class="p-4 md:p-10 bg-slate-50 dark:bg-darkBg text-slate-900 dark:text-slate-100">
+
+  <div class="max-w-7xl mx-auto">
+    <div class="flex justify-between items-center mb-8">
+      <div>
+        <h1 class="text-2xl md:text-3xl font-extrabold tracking-tight italic text-indigo-600 dark:text-indigo-400">LOGÍSTICA DASHBOARD</h1>
+        <p class="text-xs text-slate-500 font-medium uppercase tracking-widest mt-1">Gestão de Performance Operacional</p>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="exportarExcel()" class="p-2 px-4 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 transition font-bold text-sm shadow-lg">
+          📥 Exportar Excel
+        </button>
+        <button onclick="toggleTheme()" class="p-2 px-4 rounded-lg bg-slate-200 dark:bg-slate-700 hover:ring-2 ring-indigo-500 transition font-bold text-sm">
+          <span id="themeIcon">🌙 Dark Mode</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+      <div class="bg-white dark:bg-darkCard p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+        <label class="text-xs font-bold text-slate-500 uppercase">Início</label>
+        <input type="date" id="dtInicio" class="w-full bg-transparent border-none focus:ring-0">
+      </div>
+      <div class="bg-white dark:bg-darkCard p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+        <label class="text-xs font-bold text-slate-500 uppercase">Fim</label>
+        <input type="date" id="dtFim" class="w-full bg-transparent border-none focus:ring-0">
+      </div>
+      <div class="bg-white dark:bg-darkCard p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+        <label class="text-xs font-bold text-slate-500 uppercase">Placa</label>
+        <select id="filtroPlaca" class="w-full bg-transparent border-none focus:ring-0 outline-none"></select>
+      </div>
+      <button onclick="aplicarFiltros()" class="bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition shadow-lg shadow-indigo-200 dark:shadow-none uppercase text-sm">Atualizar Dados</button>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
+      <div class="bg-indigo-600 text-white p-5 rounded-xl shadow-md border-b-4 border-indigo-800">
+        <p class="text-indigo-100 text-xs font-bold uppercase">Anteontem (<span id="labelDataAnteontem">--/--</span>)</p>
+        <h2 id="faturamentoAnteontem" class="text-2xl font-black mt-1">R$ 0,00</h2>
+      </div>
+
+      <div class="bg-white dark:bg-darkCard p-5 rounded-xl shadow-sm border-b-4 border-indigo-500">
+        <p class="text-slate-500 text-xs font-bold uppercase">Total Período</p>
+        <h2 id="totalFaturado" class="text-2xl font-black mt-1 text-indigo-600 dark:text-indigo-400">R$ 0,00</h2>
+      </div>
+      <div class="bg-white dark:bg-darkCard p-5 rounded-xl shadow-sm border-b-4 border-slate-300 dark:border-slate-600">
+        <p class="text-slate-500 text-xs font-bold uppercase">Frota Total</p>
+        <h2 id="totalVeiculos" class="text-2xl font-black mt-1">0</h2>
+      </div>
+      <div class="bg-white dark:bg-darkCard p-5 rounded-xl shadow-sm border-b-4 border-emerald-500">
+        <p class="text-slate-500 text-xs font-bold uppercase">Veículos Ativos</p>
+        <h2 id="veiculosAtivos" class="text-2xl font-black text-emerald-500 mt-1">0</h2>
+      </div>
+      <div class="bg-white dark:bg-darkCard p-5 rounded-xl shadow-sm border-b-4 border-red-500">
+        <p class="text-slate-500 text-xs font-bold uppercase">Ociosos</p>
+        <h2 id="veiculosParados" class="text-2xl font-black text-red-500 mt-1">0</h2>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+      <div class="lg:col-span-2 bg-white dark:bg-darkCard p-6 rounded-xl shadow-sm">
+        <h3 class="font-bold mb-4 text-slate-700 dark:text-slate-300 uppercase text-sm tracking-wider">Evolução Progressiva Diária</h3>
+        <div class="h-80"><canvas id="chartEvolucao"></canvas></div>
+      </div>
+      <div class="bg-white dark:bg-darkCard p-6 rounded-xl shadow-sm">
+        <h3 class="font-bold mb-4 text-slate-700 dark:text-slate-300 uppercase text-sm tracking-wider">Mix por Segmento</h3>
+        <div class="h-80"><canvas id="chartPizza"></canvas></div>
+      </div>
+    </div>
+
+    <div class="bg-white dark:bg-darkCard p-6 rounded-xl shadow-sm mb-8">
+      <h3 class="font-bold mb-4 text-slate-700 dark:text-slate-300 uppercase text-sm tracking-wider">Top 10 Placas (Faturamento)</h3>
+      <div class="h-64"><canvas id="chartTopPlacas"></canvas></div>
+    </div>
+
+    <div class="bg-white dark:bg-darkCard rounded-xl shadow-sm overflow-hidden border border-slate-200 dark:border-slate-700">
+      <div class="p-6 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
+        <h3 class="font-bold italic uppercase text-sm">Análise de Performance por Motorista</h3>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse" id="tabelaPerformance">
+          <thead>
+            <tr class="bg-slate-50 dark:bg-slate-800 text-xs uppercase font-bold text-slate-500 border-b border-slate-200 dark:border-slate-700">
+              <th onclick="ordenarTabela('placa')" class="p-4 cursor-pointer hover:bg-indigo-50 dark:hover:bg-slate-700 transition">Placa</th>
+              <th onclick="ordenarTabela('motorista')" class="p-4 cursor-pointer hover:bg-indigo-50 dark:hover:bg-slate-700 transition">
+                Motorista <span id="icon-motorista" class="table-sort-icon"></span>
+              </th>
+              <th class="p-4">Segmento</th>
+              <th onclick="ordenarTabela('faturado')" class="p-4 cursor-pointer hover:bg-indigo-50 dark:hover:bg-slate-700 transition">
+                Faturado <span id="icon-faturado" class="table-sort-icon"></span>
+              </th>
+              <th class="p-4 text-slate-400 font-medium">Meta Acum.</th>
+              <th onclick="ordenarTabela('progresso')" class="p-4 cursor-pointer hover:bg-indigo-50 dark:hover:bg-slate-700 transition">
+                % Atingimento <span id="icon-progresso" class="table-sort-icon"></span>
+              </th>
+              <th class="p-4">Tendência (30d)</th>
+            </tr>
+          </thead>
+          <tbody id="corpoTabela" class="text-sm divide-y divide-slate-100 dark:divide-slate-700"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let dadosBrutos = [];
+    let dadosTabela = []; 
+    let ordemAtual = { coluna: '', direcao: 'asc' };
+    let chartLinha, chartBarras, chartPizza;
+    
+    const METAS = { "RODOTANQUE": 65000, "VANDERLEIA": 45000 };
+
+    function toggleTheme() {
+      const html = document.documentElement;
+      const icon = document.getElementById('themeIcon');
+      if (html.classList.contains('light')) {
+        html.classList.replace('light', 'dark');
+        icon.innerText = "☀️ Light Mode";
+      } else {
+        html.classList.replace('dark', 'light');
+        icon.innerText = "🌙 Dark Mode";
+      }
+      if(dadosBrutos.length > 0) aplicarFiltros(); 
+    }
+
+    window.onload = () => {
+      if (typeof google !== 'undefined') {
+        google.script.run
+          .withSuccessHandler(data => {
+            if (data && data.length > 0) {
+              dadosBrutos = data;
+              popularFiltroPlaca();
+              aplicarFiltros();
+            }
+          })
+          .withFailureHandler(err => console.error("Erro ao buscar dados:", err))
+          .getDadosLogistica();
+      }
+    };
+
+    function popularFiltroPlaca() {
+      const placas = [...new Set(dadosBrutos.map(d => d.placa))].sort();
+      const select = document.getElementById('filtroPlaca');
+      if(select) {
+        select.innerHTML = '<option value="TODAS">TODAS AS PLACAS</option>';
+        placas.forEach(p => select.innerHTML += `<option value="${p}">${p}</option>`);
+      }
+    }
+
+    function aplicarFiltros() {
+      const dtIni = document.getElementById('dtInicio').value; 
+      const dtFim = document.getElementById('dtFim').value;
+      const placaSel = document.getElementById('filtroPlaca').value;
+
+      let filtrados = dadosBrutos.filter(d => {
+        const dItem = d.data;
+        const dataOk = (!dtIni || dItem >= dtIni) && (!dtFim || dItem <= dtFim);
+        const placaOk = (placaSel === "TODAS" || d.placa === placaSel);
+        return dataOk && placaOk;
+      }).sort((a,b) => a.data.localeCompare(b.data));
+
+      processarDash(filtrados);
+    }
+
+    // Função de Cálculo de Tendência (Ciclo 21 ao 20)
+    function calcularTendencia(placa, meta) {
+      const hoje = new Date();
+      let inicioCiclo, fimCiclo;
+      
+      if (hoje.getDate() >= 21) {
+        inicioCiclo = new Date(hoje.getFullYear(), hoje.getMonth(), 21);
+        fimCiclo = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 20);
+      } else {
+        inicioCiclo = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 21);
+        fimCiclo = new Date(hoje.getFullYear(), hoje.getMonth(), 20);
+      }
+
+      const diasDecorridos = Math.max(1, Math.floor((hoje - inicioCiclo) / (1000 * 60 * 60 * 24)));
+      const faturamentoCiclo = dadosBrutos
+        .filter(d => d.placa === placa && new Date(d.data) >= inicioCiclo && new Date(d.data) <= hoje)
+        .reduce((acc, curr) => acc + (curr.valor || 0), 0);
+
+      const projetado = (faturamentoCiclo / diasDecorridos) * 30;
+      const atingimentoTendencia = (projetado / meta) * 100;
+
+      let cor = "text-red-500";
+      if (atingimentoTendencia >= 100) cor = "text-emerald-500";
+      else if (atingimentoTendencia >= 90) cor = "text-amber-500";
+
+      return { valor: projetado, cor: cor, percent: atingimentoTendencia };
+    }
+
+    function processarDash(dados) {
+      const hoje = new Date();
+      const anteontem = new Date(hoje);
+      anteontem.setDate(hoje.getDate() - 2);
+      
+      const dataAnteontemISO = anteontem.toISOString().split('T')[0];
+      const dataAnteontemFormatada = dataAnteontemISO.split('-').reverse().slice(0,2).join('/');
+      
+      const faturamentoAnteontem = dadosBrutos
+        .filter(d => d.data === dataAnteontemISO)
+        .reduce((acc, curr) => acc + (curr.valor || 0), 0);
+
+      const labelData = document.getElementById('labelDataAnteontem');
+      const valAnteontem = document.getElementById('faturamentoAnteontem');
+      if(labelData) labelData.innerText = dataAnteontemFormatada;
+      if(valAnteontem) valAnteontem.innerText = faturamentoAnteontem.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+
+      const totalFat = dados.reduce((acc, curr) => acc + (curr.valor || 0), 0);
+      const placasNoFiltro = [...new Set(dados.map(d => d.placa))];
+      const placasComFat = [...new Set(dados.filter(d => d.valor > 0).map(d => d.placa))];
+      
+      if(document.getElementById('totalFaturado')) document.getElementById('totalFaturado').innerText = totalFat.toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+      if(document.getElementById('totalVeiculos')) document.getElementById('totalVeiculos').innerText = placasNoFiltro.length;
+      if(document.getElementById('veiculosAtivos')) document.getElementById('veiculosAtivos').innerText = placasComFat.length;
+      if(document.getElementById('veiculosParados')) document.getElementById('veiculosParados').innerText = placasNoFiltro.length - placasComFat.length;
+
+      const agrupadoData = dados.reduce((acc, curr) => {
+        acc[curr.data] = (acc[curr.data] || 0) + curr.valor;
+        return acc;
+      }, {});
+      let acumulado = 0;
+      const labelsLinha = Object.keys(agrupadoData).map(d => d.split('-').reverse().slice(0,2).join('/'));
+      const valoresLinha = Object.values(agrupadoData).map(v => acumulado += v);
+      renderLinha(labelsLinha, valoresLinha);
+
+      const fatSeg = dados.reduce((acc, curr) => {
+        acc[curr.segmento] = (acc[curr.segmento] || 0) + curr.valor;
+        return acc;
+      }, {});
+      renderPizza(Object.keys(fatSeg), Object.values(fatSeg));
+
+      const fatPlaca = dados.reduce((acc, curr) => {
+        acc[curr.placa] = (acc[curr.placa] || 0) + curr.valor;
+        return acc;
+      }, {});
+      const top10 = Object.entries(fatPlaca).sort((a,b) => b[1] - a[1]).slice(0, 10);
+      renderBarras(top10.map(x => x[0]), top10.map(x => x[1]));
+
+      const agruparMot = dados.reduce((acc, curr) => {
+        const key = `${curr.placa}|${curr.motorista}|${curr.segmento}`;
+        acc[key] = (acc[key] || 0) + curr.valor;
+        return acc;
+      }, {});
+
+      dadosTabela = Object.entries(agruparMot).map(([key, valor]) => {
+        const [placa, mot, seg] = key.split('|');
+        const meta = METAS[seg.toUpperCase()] || 0;
+        const progresso = meta > 0 ? (valor / meta * 100) : 0;
+        return { 
+          placa, 
+          motorista: mot, 
+          segmento: seg, 
+          faturado: valor, 
+          meta: meta, 
+          progresso: progresso,
+          tendencia: calcularTendencia(placa, meta)
+        };
+      });
+
+      renderTabela(dadosTabela);
+    }
+
+    function renderTabela(lista) {
+      const corpo = document.getElementById('corpoTabela');
+      if(!corpo) return;
+      corpo.innerHTML = lista.map(item => {
+        const perc = Math.min(item.progresso, 100).toFixed(1);
+        return `
+          <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition border-b border-slate-100 dark:border-slate-800">
+            <td class="p-4 font-mono text-xs font-bold">${item.placa}</td>
+            <td class="p-4 font-bold text-indigo-900 dark:text-indigo-200">${item.motorista}</td>
+            <td class="p-4 text-slate-500 font-medium">${item.segmento}</td>
+            <td class="p-4 text-indigo-600 dark:text-indigo-400 font-bold">R$ ${item.faturado.toLocaleString('pt-BR')}</td>
+            <td class="p-4 text-slate-400 italic text-xs">R$ ${item.meta.toLocaleString('pt-BR')}</td>
+            <td class="p-4">
+              <div class="flex items-center gap-3">
+                <div class="flex-1 bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+                  <div class="bg-indigo-500 h-full" style="width:${perc}%"></div>
+                </div>
+                <span class="text-xs font-black text-slate-700 dark:text-slate-300">${perc}%</span>
+              </div>
+            </td>
+            <td class="p-4">
+              <div class="flex flex-col">
+                <span class="font-bold text-xs ${item.tendencia.cor}">R$ ${item.tendencia.valor.toLocaleString('pt-BR', {maximumFractionDigits:0})}</span>
+                <span class="text-[10px] text-slate-400">${item.tendencia.percent.toFixed(1)}% da meta</span>
+              </div>
+            </td>
+          </tr>`;
+      }).join('');
+    }
+
+    function ordenarTabela(coluna) {
+      if (ordemAtual.coluna === coluna) {
+        ordemAtual.direcao = ordemAtual.direcao === 'asc' ? 'desc' : 'asc';
+      } else {
+        ordemAtual.coluna = coluna;
+        ordemAtual.direcao = 'asc';
+      }
+      dadosTabela.sort((a, b) => {
+        let v1 = a[coluna];
+        let v2 = b[coluna];
+        if (typeof v1 === 'string') return ordemAtual.direcao === 'asc' ? v1.localeCompare(v2) : v2.localeCompare(v1);
+        return ordemAtual.direcao === 'asc' ? v1 - v2 : v2 - v1;
+      });
+      renderTabela(dadosTabela);
+    }
+
+    function exportarExcel() {
+      const infoParaExportar = dadosTabela.map(item => ({
+        "Placa": item.placa,
+        "Motorista": item.motorista,
+        "Segmento": item.segmento,
+        "Faturado": item.faturado,
+        "Meta": item.meta,
+        "% Atingimento": item.progresso.toFixed(2) + "%",
+        "Tendência (Projetado)": item.tendencia.valor.toFixed(2)
+      }));
+      
+      const ws = XLSX.utils.json_to_sheet(infoParaExportar);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Performance");
+      XLSX.writeFile(wb, `Relatorio_Logistica_${new Date().toISOString().slice(0,10)}.xlsx`);
+    }
+
+    function renderLinha(labels, valores) {
+      const isDark = document.documentElement.classList.contains('dark');
+      const ctx = document.getElementById('chartEvolucao');
+      if(!ctx) return;
+      if (chartLinha) chartLinha.destroy();
+      chartLinha = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets: [{ 
+          label: 'Faturamento Acumulado', 
+          data: valores, 
+          borderColor: '#6366f1', 
+          backgroundColor: 'rgba(99, 102, 241, 0.1)',
+          fill: true, tension: 0.3, pointRadius: 4
+        }] },
+        options: { responsive: true, maintainAspectRatio: false,
+          scales: { 
+            y: { grid: { color: isDark ? '#334155' : '#f1f5f9' }, ticks: { color: '#94a3b8' } },
+            x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+          },
+          plugins: { legend: { display: false } }
+        }
+      });
+    }
+
+    function renderPizza(labels, valores) {
+      const ctx = document.getElementById('chartPizza');
+      if(!ctx) return;
+      if (chartPizza) chartPizza.destroy();
+      chartPizza = new Chart(ctx, {
+        type: 'doughnut',
+        data: { labels, datasets: [{
+          data: valores,
+          backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'],
+          borderWidth: 0, hoverOffset: 15
+        }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', padding: 15 } } },
+          cutout: '72%'
+        }
+      });
+    }
+
+    function renderBarras(labels, valores) {
+      const ctx = document.getElementById('chartTopPlacas');
+      if(!ctx) return;
+      if (chartBarras) chartBarras.destroy();
+      chartBarras = new Chart(ctx, {
+        type: 'bar',
+        data: { labels, datasets: [{ label: 'Total Faturado', data: valores, backgroundColor: '#6366f1', borderRadius: 4 }] },
+        options: { 
+          indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: { 
+            x: { grid: { display: false }, ticks: { color: '#94a3b8' } },
+            y: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>
